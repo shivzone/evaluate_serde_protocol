@@ -1,0 +1,11 @@
+goos: darwin
+goarch: amd64
+pkg: github.com/evaluate_serde_protocol
+BenchmarkJSONMarshal-8         	 2709140	       441 ns/op	     112 B/op	       1 allocs/op
+BenchmarkJSONUnmarshal-8       	  729528	      1595 ns/op	     296 B/op	       9 allocs/op
+BenchmarkProtoBufMarshal-8     	 6462808	       186 ns/op	      64 B/op	       1 allocs/op
+BenchmarkProtoBufUnmarshal-8   	 3093736	       386 ns/op	     112 B/op	       6 allocs/op
+BenchmarkGobMarshal-8          	 2498959	       480 ns/op	      32 B/op	       1 allocs/op
+BenchmarkGobUnmarshal-8        	 1622719	       726 ns/op	     224 B/op	       8 allocs/op
+PASS
+ok  	github.com/evaluate_serde_protocol	10.918s

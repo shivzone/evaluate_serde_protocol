@@ -1,0 +1,9 @@
+syntax = "proto3";
+package main;
+
+message BookProto {
+  string hostname = 1;
+  string status = 2;
+  int64 timestamp = 3;
+  repeated string lsns = 4;
+}

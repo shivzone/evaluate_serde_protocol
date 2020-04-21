@@ -26,10 +26,10 @@ func generateObject() *AgentData {
     }
 }
 
-func generateProtoBufObject() *BookProto {
+func generateProtoBufObject() *AgentProto {
     obj := generateObject()
 
-    return &BookProto{
+    return &AgentProto{
         Hostname:   *proto.String(obj.Hostname),
         Status:     *proto.String(obj.Status),
         Timestamp:  *proto.Int64(int64(obj.Timestamp)),
@@ -84,7 +84,7 @@ func BenchmarkProtoBufUnmarshal(b *testing.B) {
         panic(err)
     }
 
-    obj := &BookProto{}
+    obj := &AgentProto{}
 
     b.ResetTimer()
     for n := 0; n < b.N; n++ {

@@ -1,7 +1,7 @@
 syntax = "proto3";
 package main;
 
-message BookProto {
+message AgentProto {
   string hostname = 1;
   string status = 2;
   int64 timestamp = 3;

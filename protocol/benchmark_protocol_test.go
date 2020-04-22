@@ -1,7 +1,7 @@
 package main
 
 import (
-    "crypto/tls"
+    //"crypto/tls"
     "encoding/json"
     "fmt"
     "io/ioutil"
@@ -305,18 +305,18 @@ func BenchmarkHTTPNoKeepAlive(b *testing.B) {
     }
 }
 
-func BenchmarkHTTPSNoKeepAlive(b *testing.B) {
-    startHTTPSServer()
-
-    client := &http.Client{
-        Transport: &http.Transport{
-            DisableKeepAlives: true,
-            TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-        },
-    }
-
-    b.ResetTimer()
-    for n := 0; n < b.N; n++ {
-        sendRequest(client, "https://127.0.0.1:8443/")
-    }
-}
+//func BenchmarkHTTPSNoKeepAlive(b *testing.B) {
+//    startHTTPSServer()
+//
+//    client := &http.Client{
+//        Transport: &http.Transport{
+//            DisableKeepAlives: true,
+//            TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+//        },
+//    }
+//
+//    b.ResetTimer()
+//    for n := 0; n < b.N; n++ {
+//        sendRequest(client, "https://127.0.0.1:8443/")
+//    }
+//}

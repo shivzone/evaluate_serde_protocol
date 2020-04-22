@@ -1,0 +1,17 @@
+syntax = "proto3";
+package agent;
+
+message AgentProto {
+  string hostname = 1;
+  string status = 2;
+  int64 timestamp = 3;
+  repeated string lsns = 4;
+}
+
+message AgentRequest {
+  string data = 1;
+}
+
+service Agent {
+  rpc ServeAgentProto (AgentRequest) returns (AgentProto) {}
+}

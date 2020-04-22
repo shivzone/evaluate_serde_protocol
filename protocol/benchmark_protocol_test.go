@@ -2,6 +2,7 @@ package main
 
 import (
     "crypto/tls"
+    "encoding/json"
     "fmt"
     "io/ioutil"
     "net"
@@ -10,31 +11,64 @@ import (
     "net/rpc/jsonrpc"
     "testing"
 
+    pb "github.com/evaluate_serde_protocol/protocol/agent"
+    "golang.org/x/net/context"
     "google.golang.org/grpc"
+    "google.golang.org/protobuf/proto"
 )
 
-var tcpHandler, jsonHandler, httpHandler *TestHandler
-var grpcHandler *grpc.Server
+var tcpHandler, jsonHandler, httpHandler, grpcHandler *AgentHandler
 var httpServer, httpsServer *http.Server
 
-type TestHandler struct {
+type AgentHandler struct {}
+
+type AgentData struct {
+    Hostname    string   `json:"hostname"`
+    Status      string   `json:"status"`
+    Timestamp   int64    `json:"timestamp"`
+    Lsns        []string `json:"lsns"`
 }
 
-func (th *TestHandler) Serve(arg *int, reply *string) error {
-    *reply = "OK.\n"
+func generateObject() *AgentData {
+    return &AgentData{
+        Hostname:   "10.64.6.138",
+        Status:     "In Progress",
+        Timestamp:  1282368345,
+        Lsns:       []string{"16/B374D848", "16/B374D010"},
+    }
+}
+
+func (th *AgentHandler) Serve(arg *string, reply *AgentData) error {
+    temp := generateObject()
+    reply.Hostname = temp.Hostname
+    reply.Status = temp.Status
+    reply.Lsns = temp.Lsns
+    reply.Timestamp = temp.Timestamp
     return nil
 }
 
-func (th *TestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "text/plain")
-    w.Write([]byte("OK.\n"))
+func (th *AgentHandler) ServeAgentProto(ctx context.Context, in *pb.AgentRequest) (*pb.AgentProto, error) {
+    obj := generateObject()
+
+    return &pb.AgentProto{
+       Hostname:  *proto.String(obj.Hostname),
+       Status:    *proto.String(obj.Status),
+       Timestamp: *proto.Int64(int64(obj.Timestamp)),
+       Lsns:      obj.Lsns,
+    }, nil
+}
+
+func (th *AgentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+    out, _ := json.Marshal(generateObject())
+    w.Write(out)
 }
 
 func startTCPRPCServer() {
     if tcpHandler != nil {
         return
     }
-    tcpHandler = new(TestHandler)
+    tcpHandler = new(AgentHandler)
     rpc.Register(tcpHandler)
 
     tcpAddr, err := net.ResolveTCPAddr("tcp", ":8081")
@@ -60,7 +94,7 @@ func startJSONRPCServer() {
     if jsonHandler != nil {
         return
     }
-    jsonHandler = new(TestHandler)
+    jsonHandler = new(AgentHandler)
     rpc.Register(jsonHandler)
 
     tcpAddr, err := net.ResolveTCPAddr("tcp", ":8082")
@@ -82,33 +116,35 @@ func startJSONRPCServer() {
     }()
 }
 
-func startHTTPRPCServer() {
-    if httpHandler != nil {
+func startGRPCServer() {
+    if grpcHandler != nil {
         return
     }
-    httpHandler = new(TestHandler)
-    rpc.Register(httpHandler)
-    rpc.HandleHTTP()
-
+    grpcServer := grpc.NewServer()
+    grpcHandler = new(AgentHandler)
+    listener, err := net.Listen("tcp", ":8084")
+    if err != nil {
+        panic(err)
+    }
+    pb.RegisterAgentServer(grpcServer, grpcHandler)
     go func() {
-        err := http.ListenAndServe(":8083", nil)
+        err = grpcServer.Serve(listener)
         if err != nil {
             fmt.Println(err.Error())
         }
     }()
 }
 
-func startGRPCServer() {
-    if grpcHandler != nil {
+func startHTTPRPCServer() {
+    if httpHandler != nil {
         return
     }
-    grpcHandler = grpc.NewServer()
-    listener, err := net.Listen("tcp", ":8084")
-    if err != nil {
-        panic(err)
-    }
+    httpHandler = new(AgentHandler)
+    rpc.Register(httpHandler)
+    rpc.HandleHTTP()
+
     go func() {
-        err = grpcHandler.Serve(listener)
+        err := http.ListenAndServe(":8083", nil)
         if err != nil {
             fmt.Println(err.Error())
         }
@@ -121,7 +157,7 @@ func startHTTPServer() {
     }
 
     httpServer = &http.Server{
-        Handler: &TestHandler{},
+        Handler: &AgentHandler{},
     }
 
     listener, err := net.Listen("tcp", ":8080")
@@ -143,7 +179,7 @@ func startHTTPSServer() {
     }
 
     httpsServer = &http.Server{
-        Handler: &TestHandler{},
+        Handler: &AgentHandler{},
     }
 
     listener, err := net.Listen("tcp", ":8443")
@@ -180,6 +216,22 @@ func sendRequest(client *http.Client, addr string) {
     }
 }
 
+func BenchmarkHTTPRPC(b *testing.B) {
+    startHTTPRPCServer()
+
+    client, _ := rpc.DialHTTP("tcp", "127.0.0.1:8083")
+    defer client.Close()
+
+    b.ResetTimer()
+    var reply AgentData
+    for n := 0; n < b.N; n++ {
+        err := client.Call("AgentHandler.Serve", string(n), &reply)
+        if err != nil {
+            panic(err)
+        }
+    }
+}
+
 func BenchmarkTCPRPC(b *testing.B) {
     startTCPRPCServer()
 
@@ -187,9 +239,9 @@ func BenchmarkTCPRPC(b *testing.B) {
     defer client.Close()
 
     b.ResetTimer()
-    var reply string
+    var reply AgentData
     for n := 0; n < b.N; n++ {
-      err := client.Call("TestHandler.Serve", n, &reply)
+      err := client.Call("AgentHandler.Serve", string(n), &reply)
       if err != nil {
           panic(err)
       }
@@ -203,25 +255,9 @@ func BenchmarkJSONRPC(b *testing.B) {
     defer client.Close()
 
     b.ResetTimer()
-    var reply string
+    var reply AgentData
     for n := 0; n < b.N; n++ {
-        err := client.Call("TestHandler.Serve", n, &reply)
-        if err != nil {
-            panic(err)
-        }
-    }
-}
-
-func BenchmarkHTTPRPC(b *testing.B) {
-    startHTTPRPCServer()
-
-    client, _ := rpc.DialHTTP("tcp", "127.0.0.1:8083")
-    defer client.Close()
-
-    b.ResetTimer()
-    var reply string
-    for n := 0; n < b.N; n++ {
-        err := client.Call("TestHandler.Serve", n, &reply)
+        err := client.Call("AgentHandler.Serve", string(n), &reply)
         if err != nil {
             panic(err)
         }
@@ -231,18 +267,16 @@ func BenchmarkHTTPRPC(b *testing.B) {
 func BenchmarkGPRPC(b *testing.B) {
     startGRPCServer()
 
-    client, _ := grpc.Dial(":8084", grpc.WithInsecure())
-    defer client.Close()
-
-    // TODO: Pending grpc
-    //b.ResetTimer()
-    //var reply string
-    //for n := 0; n < b.N; n++ {
-    //    err := client.Call("TestHandler.Serve", n, &reply)
-    //    if err != nil {
-    //        panic(err)
-    //    }
-    //}
+    conn, _ := grpc.Dial(":8084", grpc.WithInsecure())
+    defer conn.Close()
+    client := pb.NewAgentClient(conn)
+    b.ResetTimer()
+    for n := 0; n < b.N; n++ {
+        _, err := client.ServeAgentProto(context.Background(), &pb.AgentRequest{Data: string(n)})
+        if err != nil {
+            panic(err)
+        }
+    }
 }
 
 func BenchmarkHTTP(b *testing.B) {
